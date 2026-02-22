@@ -6,7 +6,7 @@ import { Vibrant } from 'node-vibrant/node'
 // v1 metrics (real implementation):
 // - Palette: prominent swatches + saturation/brightness summary
 // - Texture energy: edge-density / high-frequency proxy; also saved as grayscale displacement map
-// - Stroke direction: simple orientation histogram from Sobel gradients + coherence score
+// - Stroke direction: orientation histogram from Sobel gradients + coherence score
 
 const artworksPath = path.resolve('public/data/artworks.json')
 const imagesDir = path.resolve('public/data/images')
@@ -46,7 +46,6 @@ async function paletteMetrics(imagePath) {
     population: s.population
   }))
 
-  // quick saturation/brightness stats from downsampled pixels
   const img = await Image.load(imagePath)
   const small = img.resize({ width: 128 })
   const data = small.getRGBAData()
@@ -71,11 +70,9 @@ async function textureEnergyAndMap(imagePath, outPngPath) {
   const gray = img.grey()
   const small = gray.resize({ width: 512 })
 
-  // Sobel magnitude as a proxy for high-frequency/impasto regions
   const sobel = small.sobelFilter()
   const data = sobel.data
 
-  // normalize to 0..255
   let max = 1
   for (let i = 0; i < data.length; i++) max = Math.max(max, data[i])
 
@@ -101,25 +98,17 @@ async function strokeDirectionMetrics(imagePath) {
   const img = await Image.load(imagePath)
   const gray = img.grey().resize({ width: 256 })
 
-  // Compute gradients (simple sobel kernels)
-  const gx = gray.convolution({ kernel: [
-    [-1, 0, 1],
-    [-2, 0, 2],
-    [-1, 0, 1]
-  ] })
-  const gy = gray.convolution({ kernel: [
-    [-1, -2, -1],
-    [ 0,  0,  0],
-    [ 1,  2,  1]
-  ] })
+  // Use image-js built-in Sobel to avoid kernel format issues.
+  const gx = gray.sobelFilter({ direction: 'x' })
+  const gy = gray.sobelFilter({ direction: 'y' })
+
+  const dx = gx.data
+  const dy = gy.data
 
   const bins = 12
   const hist = new Array(bins).fill(0)
   let magSum = 0
   let vx = 0, vy = 0
-
-  const dx = gx.data
-  const dy = gy.data
 
   for (let i = 0; i < dx.length; i++) {
     const x = dx[i]
@@ -132,7 +121,6 @@ async function strokeDirectionMetrics(imagePath) {
     hist[bin] += mag
     magSum += mag
 
-    // coherence: magnitude-weighted mean direction vector
     vx += Math.cos(ang) * mag
     vy += Math.sin(ang) * mag
   }
