@@ -45,10 +45,11 @@ export function initViewer(mountEl) {
     group.clear()
     mesh = null
 
-    if (!artwork?.primaryImageSmall) return
+    const imageUrl = artwork?.imageLocalSmall || artwork?.primaryImageSmall
+    if (!imageUrl) return
 
     const texLoader = new THREE.TextureLoader()
-    const colorTex = await texLoader.loadAsync(artwork.primaryImageSmall)
+    const colorTex = await texLoader.loadAsync(imageUrl)
     colorTex.colorSpace = THREE.SRGBColorSpace
 
     let dispTex = null
