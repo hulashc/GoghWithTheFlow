@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { Image } from 'image-js'
-import Vibrant from 'node-vibrant'
+import { Vibrant } from 'node-vibrant/node'
 
 // v1 metrics (real implementation):
 // - Palette: prominent swatches + saturation/brightness summary
