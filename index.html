@@ -3,41 +3,48 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GoghWithTheFlow — Compare Viewer</title>
+    <title>GoghWithTheFlow</title>
     <style>
       :root {
         color-scheme: dark;
         --bg: #0b0b0b;
         --surface: #111;
+        --surface2: #161616;
         --border: #222;
         --text: #e8e8e8;
-        --muted: #777;
+        --muted: #666;
         --accent: #a78bfa;
+        --accent2: #60a5fa;
       }
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-      body {
+      html, body {
+        height: 100%;
         background: var(--bg);
         color: var(--text);
         font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-        display: flex;
-        flex-direction: column;
-        height: 100dvh;
         overflow: hidden;
+      }
+
+      /* ── App shell ── */
+      .app {
+        display: grid;
+        grid-template-rows: 48px 1fr;
+        grid-template-columns: 260px 1fr 320px;
+        height: 100vh;
       }
 
       /* ── Header ── */
       header {
+        grid-column: 1 / -1;
         display: flex;
         align-items: center;
-        gap: 12px;
-        padding: 8px 16px;
+        gap: 16px;
+        padding: 0 16px;
         background: var(--surface);
         border-bottom: 1px solid var(--border);
-        flex-shrink: 0;
-        flex-wrap: wrap;
       }
-      header .logo { font-weight: 700; font-size: 14px; letter-spacing: .05em; color: var(--accent); }
-      header label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+      .logo { font-weight: 700; font-size: 14px; letter-spacing: .06em; color: var(--accent); }
+      .header-meta { font-size: 11px; color: var(--muted); }
       header select {
         background: #1b1b1b;
         color: var(--text);
@@ -47,125 +54,196 @@
         font-size: 12px;
         cursor: pointer;
         outline: none;
-      }
-      header select:hover { border-color: #444; }
-      #randomBtn {
         margin-left: auto;
-        background: var(--accent);
-        color: #000;
-        border: none;
-        border-radius: 6px;
-        padding: 5px 14px;
-        font-size: 12px;
-        font-weight: 600;
-        cursor: pointer;
-        letter-spacing: .03em;
-        transition: opacity .15s;
       }
-      #randomBtn:hover { opacity: 0.85; }
+      header label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
 
-      /* ── Panels ── */
-      main {
-        flex: 1;
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-        padding: 8px;
-        min-height: 0;
-      }
-      .panel {
+      /* ── Sidebar: scrollable thumbnail list ── */
+      .sidebar {
+        grid-row: 2;
+        grid-column: 1;
+        overflow-y: auto;
+        border-right: 1px solid var(--border);
+        background: var(--surface);
+        padding: 8px 6px;
         display: flex;
         flex-direction: column;
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        overflow: hidden;
-        background: var(--bg);
+        gap: 4px;
       }
-      .panel-header {
-        flex-shrink: 0;
-        padding: 7px 12px;
-        border-bottom: 1px solid var(--border);
-        background: #0f0f0f;
-      }
-      .panel-header h2 { font-size: 12px; font-weight: 600; }
-      .panel-header .meta { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-      .canvasWrap {
-        flex: 1;
-        min-height: 0;
-        position: relative;
-      }
-      .canvasWrap canvas { display: block; width: 100% !important; height: 100% !important; }
+      .sidebar::-webkit-scrollbar { width: 4px; }
+      .sidebar::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
 
-      /* mode badge */
-      .mode-badge {
-        position: absolute;
-        bottom: 8px;
-        right: 8px;
-        background: rgba(0,0,0,.55);
-        border: 1px solid #333;
-        border-radius: 20px;
-        padding: 2px 10px;
+      .thumb-card {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 6px 8px;
+        border-radius: 8px;
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: background .12s, border-color .12s;
+      }
+      .thumb-card:hover { background: #1a1a1a; }
+      .thumb-card.active { background: #1e1730; border-color: var(--accent); }
+      .thumb-img {
+        width: 48px;
+        height: 36px;
+        object-fit: cover;
+        border-radius: 4px;
+        background: #1a1a1a;
+        flex-shrink: 0;
+      }
+      .thumb-info { overflow: hidden; }
+      .thumb-title {
+        font-size: 11px;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .thumb-artist { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+      .sidebar-section {
         font-size: 10px;
-        color: var(--accent);
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        color: var(--muted);
+        padding: 8px 8px 4px;
+        border-top: 1px solid var(--border);
+        margin-top: 4px;
+      }
+      .sidebar-section:first-child { border-top: none; margin-top: 0; }
+
+      /* ── Viewer ── */
+      .viewer {
+        grid-row: 2;
+        grid-column: 2;
+        position: relative;
+        background: var(--bg);
+        overflow: hidden;
+      }
+      #viewerCanvas { width: 100%; height: 100%; display: block; }
+
+      .viewer-controls {
+        position: absolute;
+        bottom: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 8px;
+        background: rgba(0,0,0,.6);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        padding: 5px 12px;
+        font-size: 11px;
+        color: var(--muted);
         pointer-events: none;
       }
+      .viewer-controls span { display: flex; align-items: center; gap: 4px; }
 
-      /* ── Footer ── */
-      footer {
-        flex-shrink: 0;
-        padding: 5px 16px;
-        font-size: 10px;
-        color: var(--muted);
-        border-top: 1px solid var(--border);
-        text-align: center;
+      .effect-bar {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
       }
-      footer a { color: #7ab; }
+      .eff-btn {
+        background: rgba(0,0,0,.6);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 3px 10px;
+        font-size: 11px;
+        color: #aaa;
+        cursor: pointer;
+        transition: border-color .12s, color .12s;
+      }
+      .eff-btn:hover { border-color: #555; color: #ddd; }
+      .eff-btn.active { border-color: var(--accent); color: var(--accent); }
+
+      /* ── Analysis panel ── */
+      .analysis {
+        grid-row: 2;
+        grid-column: 3;
+        overflow-y: auto;
+        border-left: 1px solid var(--border);
+        background: var(--surface2);
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+      .analysis::-webkit-scrollbar { width: 4px; }
+      .analysis::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+
+      .section-label {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: .1em;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+
+      /* artwork info */
+      .art-title { font-size: 15px; font-weight: 700; line-height: 1.3; }
+      .art-artist { font-size: 12px; color: var(--accent); margin-top: 3px; }
+      .art-date-medium { font-size: 11px; color: var(--muted); margin-top: 4px; }
+      .art-link { font-size: 11px; color: var(--accent2); text-decoration: none; margin-top: 6px; display: inline-block; }
+      .art-link:hover { text-decoration: underline; }
+
+      /* palette */
+      .palette-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+      .swatch {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 2px solid rgba(255,255,255,.08);
+        flex-shrink: 0;
+        title: '';
+      }
+
+      /* metric bars */
+      .metric { display: flex; flex-direction: column; gap: 4px; }
+      .metric-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
+      .metric-bar-bg { height: 6px; background: #222; border-radius: 4px; overflow: hidden; }
+      .metric-bar-fill { height: 100%; border-radius: 4px; transition: width .4s; }
+
+      /* histogram */
+      .hist-wrap { display: flex; align-items: flex-end; gap: 2px; height: 48px; }
+      .hist-bar { flex: 1; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 2px; transition: height .4s; }
+
+      /* empty state */
+      .empty-state { color: var(--muted); font-size: 12px; text-align: center; margin-top: 40px; }
     </style>
   </head>
   <body>
-    <header>
-      <span class="logo">GoghWithTheFlow</span>
-      <label>Left <select id="leftArtist"></select></label>
-      <label>Right <select id="rightArtist"></select></label>
-      <label>Effect <select id="mode"></select></label>
-      <button id="randomBtn">✨ Randomise</button>
-    </header>
+    <div class="app">
+      <header>
+        <span class="logo">GoghWithTheFlow</span>
+        <span class="header-meta" id="headerMeta">Loading…</span>
+        <label>Artist <select id="artistFilter"><option value="all">All artists</option></select></label>
+      </header>
 
-    <main>
-      <section class="panel">
-        <div class="panel-header">
-          <h2 id="leftTitle">—</h2>
-          <div id="leftMeta" class="meta"></div>
-        </div>
-        <div class="canvasWrap" id="leftMount">
-          <div class="mode-badge" id="leftBadge"></div>
-        </div>
-      </section>
-      <section class="panel">
-        <div class="panel-header">
-          <h2 id="rightTitle">—</h2>
-          <div id="rightMeta" class="meta"></div>
-        </div>
-        <div class="canvasWrap" id="rightMount">
-          <div class="mode-badge" id="rightBadge"></div>
-        </div>
-      </section>
-    </main>
+      <!-- Scrollable thumbnail sidebar -->
+      <aside class="sidebar" id="sidebar"></aside>
 
-    <footer>
-      Images &amp; data — <a href="https://www.metmuseum.org/hubs/open-access" target="_blank" rel="noreferrer">The Met Open Access (CC0)</a>
-    </footer>
+      <!-- three.js viewer -->
+      <div class="viewer" id="viewerWrap">
+        <div class="effect-bar" id="effectBar"></div>
+        <canvas id="viewerCanvas"></canvas>
+        <div class="viewer-controls">
+          <span>🔄 Scroll to zoom</span>
+          <span>🔍 Drag to rotate</span>
+        </div>
+      </div>
+
+      <!-- Analysis panel -->
+      <aside class="analysis" id="analysis">
+        <p class="empty-state">Select a painting to see its analysis.</p>
+      </aside>
+    </div>
 
     <script type="module" src="/src/main.js"></script>
-    <script>
-      // update mode badge label on effect change
-      const modeSel = document.getElementById('mode')
-      function updateBadge() {
-        const label = modeSel.options[modeSel.selectedIndex]?.text || ''
-        document.getElementById('leftBadge').textContent  = label !== 'Image' ? label : ''
-        document.getElementById('rightBadge').textContent = label !== 'Image' ? label : ''
-      }
-      modeSel.addEventListener('change', updateBadge)
-    </script>
   </body>
 </html>

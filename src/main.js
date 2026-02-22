@@ -1,131 +1,208 @@
 import { initViewer, EFFECTS } from './viewer.js'
 
-const DEFAULT_ARTISTS = [
-  'Vincent van Gogh',
-  'Pierre-Auguste Renoir',
-  'Paul Cézanne'
-]
+let artworks = []
+let featuresById = {}
+let selectedId  = null
+let currentEffect = 'image'
+let viewer = null
 
-const leftSel    = document.getElementById('leftArtist')
-const rightSel   = document.getElementById('rightArtist')
-const modeSel    = document.getElementById('mode')
-const randomBtn  = document.getElementById('randomBtn')
+// ── DOM refs ──
+const sidebar       = document.getElementById('sidebar')
+const analysis      = document.getElementById('analysis')
+const headerMeta    = document.getElementById('headerMeta')
+const artistFilter  = document.getElementById('artistFilter')
+const effectBar     = document.getElementById('effectBar')
+const canvas        = document.getElementById('viewerCanvas')
+const viewerWrap    = document.getElementById('viewerWrap')
 
-// Populate artist dropdowns
-for (const a of DEFAULT_ARTISTS) {
-  for (const sel of [leftSel, rightSel]) {
-    const o = document.createElement('option')
-    o.value = a; o.textContent = a
-    sel.appendChild(o)
-  }
-}
-leftSel.value  = DEFAULT_ARTISTS[0]
-rightSel.value = DEFAULT_ARTISTS[1]
+// ── Init viewer ──
+viewer = initViewer(canvas, viewerWrap)
 
-// Populate effect dropdown
+// ── Effect buttons ──
 for (const e of EFFECTS) {
-  const o = document.createElement('option')
-  o.value = e.id; o.textContent = e.label
-  modeSel.appendChild(o)
+  const btn = document.createElement('button')
+  btn.className = 'eff-btn' + (e.id === 'image' ? ' active' : '')
+  btn.textContent = e.label
+  btn.dataset.id = e.id
+  btn.addEventListener('click', () => {
+    currentEffect = e.id
+    document.querySelectorAll('.eff-btn').forEach(b => b.classList.toggle('active', b.dataset.id === e.id))
+    viewer.applyEffect(e.id)
+  })
+  effectBar.appendChild(btn)
 }
-modeSel.value = 'image'
 
-const leftMount  = document.getElementById('leftMount')
-const rightMount = document.getElementById('rightMount')
-const leftTitle  = document.getElementById('leftTitle')
-const rightTitle = document.getElementById('rightTitle')
-const leftMeta   = document.getElementById('leftMeta')
-const rightMeta  = document.getElementById('rightMeta')
-
-const leftViewer  = initViewer(leftMount)
-const rightViewer = initViewer(rightMount)
-
+// ── Load data ──
 async function loadData() {
-  const [artworks, features] = await Promise.all([
+  const [aw, ft] = await Promise.all([
     fetch('./data/artworks.json').then(r => r.json()).catch(() => ({ artworks: [] })),
     fetch('./data/features.json').then(r => r.json()).catch(() => ({ featuresById: {} }))
   ])
-  const names = [...new Set((artworks.artworks ?? []).map(a => a.artistDisplayName))]
-  console.log('[GoghWithTheFlow] Artist names in artworks.json:', names)
-  return { artworks: artworks.artworks ?? [], featuresById: features.featuresById ?? {} }
+  artworks = aw.artworks ?? []
+  featuresById = ft.featuresById ?? {}
+
+  // Populate artist filter
+  const artists = [...new Set(artworks.map(a => a.artistDisplayName))].sort()
+  for (const name of artists) {
+    const o = document.createElement('option')
+    o.value = name; o.textContent = name
+    artistFilter.appendChild(o)
+  }
+
+  headerMeta.textContent = `${artworks.length} artworks — ${artists.length} artists`
+  renderSidebar()
+  if (artworks.length) selectArtwork(artworks[0].objectID)
 }
 
-function normalize(s) {
-  return String(s || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9 ]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+// ── Sidebar ──
+function renderSidebar() {
+  sidebar.innerHTML = ''
+  const filter = artistFilter.value
+
+  // Group by artist
+  const artists = [...new Set(artworks.map(a => a.artistDisplayName))].sort()
+  for (const artist of artists) {
+    if (filter !== 'all' && filter !== artist) continue
+
+    const section = document.createElement('div')
+    section.className = 'sidebar-section'
+    section.textContent = artist
+    sidebar.appendChild(section)
+
+    const works = artworks.filter(a => a.artistDisplayName === artist)
+    for (const w of works) {
+      const card = document.createElement('div')
+      card.className = 'thumb-card' + (w.objectID === selectedId ? ' active' : '')
+      card.dataset.id = w.objectID
+
+      const img = document.createElement('img')
+      img.className = 'thumb-img'
+      img.src = w.imageLocalSmall || w.primaryImageSmall || ''
+      img.alt = w.title
+      img.loading = 'lazy'
+
+      const info = document.createElement('div')
+      info.className = 'thumb-info'
+      info.innerHTML = `<div class="thumb-title">${w.title}</div><div class="thumb-artist">${w.objectDate || ''}</div>`
+
+      card.append(img, info)
+      card.addEventListener('click', () => selectArtwork(w.objectID))
+      sidebar.appendChild(card)
+    }
+  }
 }
 
-function pickForArtist(artworks, artist, exclude = null) {
-  const target = normalize(artist)
-  const targetWords = target.split(' ').filter(Boolean)
-  const lastName = targetWords.slice(-1)[0]
+// ── Select artwork ──
+async function selectArtwork(id) {
+  selectedId = id
+  const artwork = artworks.find(a => a.objectID === id)
+  const feat    = featuresById[id]
 
-  const pool = artworks.filter(a => {
-    if (exclude && a.objectID === exclude) return false
-    const stored = normalize(a.artistDisplayName)
-    return stored === target ||
-      targetWords.every(w => stored.includes(w)) ||
-      stored.includes(lastName)
+  // Update sidebar active state
+  document.querySelectorAll('.thumb-card').forEach(c => {
+    c.classList.toggle('active', Number(c.dataset.id) === id)
   })
 
-  if (!pool.length) return null
-  return pool[Math.floor(Math.random() * pool.length)]
+  // Load into viewer
+  await viewer.setArtwork(artwork, feat, currentEffect)
+
+  // Render analysis panel
+  renderAnalysis(artwork, feat)
+
+  // Scroll active card into view
+  const activeCard = sidebar.querySelector('.thumb-card.active')
+  activeCard?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
 }
 
-let cache = null
-let leftWork  = null
-let rightWork = null
+// ── Analysis panel ──
+function renderAnalysis(artwork, feat) {
+  if (!artwork) { analysis.innerHTML = '<p class="empty-state">No artwork selected.</p>'; return }
 
-async function rerender({ newArtworks = false } = {}) {
-  if (!cache) cache = await loadData()
+  const satPct = feat?.palette?.avgSaturation != null ? Math.round(feat.palette.avgSaturation * 100) : null
+  const briPct = feat?.palette?.avgBrightness  != null ? Math.round(feat.palette.avgBrightness  * 100) : null
+  const texPct = feat?.textureEnergy?.avgEdgeMagnitude != null ? Math.round(feat.textureEnergy.avgEdgeMagnitude * 100) : null
+  const cohPct = feat?.strokeDirection?.coherence != null ? Math.round(feat.strokeDirection.coherence * 100) : null
 
-  const leftArtist  = leftSel.value
-  const rightArtist = rightSel.value
-  const mode = modeSel.value
+  const swatches = (feat?.palette?.swatches || []).slice(0, 8)
+  const hist     = feat?.strokeDirection?.hist || []
 
-  if (newArtworks || !leftWork  || normalize(leftWork.artistDisplayName).split(' ').pop() !== normalize(leftArtist).split(' ').pop()) {
-    leftWork  = pickForArtist(cache.artworks, leftArtist)
+  const maxHist  = Math.max(...hist, 0.001)
+
+  function bar(value, color = '#a78bfa', label = '') {
+    const pct = value ?? 0
+    return `
+      <div class="metric">
+        <div class="metric-row"><span>${label}</span><span>${value != null ? pct + '%' : 'n/a'}</span></div>
+        <div class="metric-bar-bg"><div class="metric-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      </div>`
   }
-  if (newArtworks || !rightWork || normalize(rightWork.artistDisplayName).split(' ').pop() !== normalize(rightArtist).split(' ').pop()) {
-    rightWork = pickForArtist(cache.artworks, rightArtist)
+
+  // Auto-generated plain-English sentence
+  function sentence() {
+    if (satPct == null || texPct == null) return ''
+    const colour = satPct > 55 ? 'highly saturated' : satPct > 35 ? 'moderately colourful' : 'muted'
+    const texture = texPct > 45 ? 'heavy impasto brushwork' : texPct > 25 ? 'moderate texture' : 'smooth, fine technique'
+    const direction = cohPct != null ? (cohPct > 55 ? 'strongly directional strokes' : cohPct > 30 ? 'varied stroke directions' : 'chaotic stroke energy') : ''
+    return `This work shows <strong>${colour}</strong> palette with <strong>${texture}</strong>${direction ? ' and ' + direction : ''}.`
   }
 
-  leftTitle.textContent  = leftArtist
-  rightTitle.textContent = rightArtist
-  if (leftMeta)  leftMeta.textContent  = leftWork  ? `${leftWork.title} — ${leftWork.objectDate  || ''}` : 'No artwork found'
-  if (rightMeta) rightMeta.textContent = rightWork ? `${rightWork.title} — ${rightWork.objectDate || ''}` : 'No artwork found'
+  analysis.innerHTML = `
+    <!-- Info -->
+    <div>
+      <div class="section-label">Artwork</div>
+      <div class="art-title">${artwork.title}</div>
+      <div class="art-artist">${artwork.artistDisplayName}</div>
+      <div class="art-date-medium">${[artwork.objectDate, artwork.medium].filter(Boolean).join(' — ')}</div>
+      ${artwork.objectURL ? `<a class="art-link" href="${artwork.objectURL}" target="_blank" rel="noreferrer">↗ View on The Met</a>` : ''}
+    </div>
 
-  await Promise.all([
-    leftViewer.setArtwork(leftWork,  cache.featuresById[leftWork?.objectID],  { mode }),
-    rightViewer.setArtwork(rightWork, cache.featuresById[rightWork?.objectID], { mode })
-  ])
+    <!-- Palette -->
+    <div>
+      <div class="section-label">Dominant Palette</div>
+      <div class="palette-row">
+        ${swatches.map(s => `<div class="swatch" style="background:${s.hex}" title="${s.hex}"></div>`).join('')}
+        ${swatches.length === 0 ? '<span style="font-size:11px;color:var(--muted)">Run compute:features to see palette</span>' : ''}
+      </div>
+    </div>
+
+    <!-- Colour metrics -->
+    <div>
+      <div class="section-label">Colour Metrics</div>
+      ${bar(satPct, '#a78bfa', 'Avg Saturation')}
+      ${bar(briPct, '#60a5fa', 'Avg Brightness')}
+    </div>
+
+    <!-- Texture -->
+    <div>
+      <div class="section-label">Texture Energy (Impasto Proxy)</div>
+      ${bar(texPct, '#f59e0b', 'Edge Density')}
+      <div style="font-size:10px;color:var(--muted);margin-top:4px">Higher = thicker, more energetic brushwork</div>
+    </div>
+
+    <!-- Stroke direction -->
+    <div>
+      <div class="section-label">Stroke Direction Histogram</div>
+      ${hist.length ? `
+        <div class="hist-wrap">
+          ${hist.map(h => `<div class="hist-bar" style="height:${Math.round((h / maxHist) * 100)}%"></div>`).join('')}
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">12 orientation bins (0–360°)</div>
+        ${bar(cohPct, '#34d399', 'Stroke Coherence')}
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">Higher = strokes all point in similar direction (e.g. Van Gogh’s swirls)</div>
+      ` : '<span style="font-size:11px;color:var(--muted)">Run compute:features to see histogram</span>'}
+    </div>
+
+    <!-- Analysis sentence -->
+    ${sentence() ? `
+    <div>
+      <div class="section-label">Auto Analysis</div>
+      <div style="font-size:12px;line-height:1.6">${sentence()}</div>
+    </div>` : ''}
+  `
 }
 
-function randomize() {
-  if (!cache) return
-  // Pick random different artists for left and right
-  const shuffled = [...DEFAULT_ARTISTS].sort(() => Math.random() - 0.5)
-  leftSel.value  = shuffled[0]
-  rightSel.value = shuffled[1]
-  // Pick a random effect
-  const randomEffect = EFFECTS[Math.floor(Math.random() * EFFECTS.length)]
-  modeSel.value = randomEffect.id
-  document.body.dataset.mode = randomEffect.id
-  rerender({ newArtworks: true })
-}
+// ── Event listeners ──
+artistFilter.addEventListener('change', () => renderSidebar())
 
-leftSel.addEventListener('change',  () => rerender({ newArtworks: true }))
-rightSel.addEventListener('change', () => rerender({ newArtworks: true }))
-modeSel.addEventListener('change',  () => {
-  document.body.dataset.mode = modeSel.value
-  if (leftWork)  leftViewer.applyEffect(modeSel.value)
-  if (rightWork) rightViewer.applyEffect(modeSel.value)
-})
-randomBtn.addEventListener('click', randomize)
-
-rerender()
+// ── Boot ──
+loadData()
