@@ -1,7 +1,7 @@
 {
   "name": "goghwiththeflow",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "image-js": "^0.35.6",
-    "node-vibrant": "^3.2.1",
+    "node-vibrant": "^4.0.4",
     "three": "^0.161.0"
   },
   "devDependencies": {
