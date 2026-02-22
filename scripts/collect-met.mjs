@@ -3,12 +3,26 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 const OUT = path.resolve('public/data/artworks.json')
+const STATE_PATH = path.resolve('public/data/collect-state.json')
 fs.mkdirSync(path.dirname(OUT), { recursive: true })
 
-const UA = 'GoghWithTheFlow/0.3 (contact: hulashc)'
+const UA = 'GoghWithTheFlow/0.4 (contact: hulashc)'
 
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms))
+}
+
+function loadState() {
+  if (!fs.existsSync(STATE_PATH)) return { byArtist: {} }
+  try {
+    return JSON.parse(fs.readFileSync(STATE_PATH, 'utf-8'))
+  } catch {
+    return { byArtist: {} }
+  }
+}
+
+function saveState(state) {
+  fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2))
 }
 
 async function fetchJson(url, { retries = 8 } = {}) {
@@ -20,9 +34,8 @@ async function fetchJson(url, { retries = 8 } = {}) {
       }
     })
 
-    // Treat 403 here as temporary block / fair-use.
     if (r.status === 403 || r.status === 429) {
-      const backoff = Math.min(120_000, 2000 * 2 ** attempt) + Math.floor(Math.random() * 750)
+      const backoff = Math.min(180_000, 2000 * 2 ** attempt) + Math.floor(Math.random() * 1000)
       console.warn(`Rate-limited (${r.status}) on ${url}. Backing off ${backoff}ms (attempt ${attempt + 1}/${retries + 1})`)
       await sleep(backoff)
       continue
@@ -35,7 +48,6 @@ async function fetchJson(url, { retries = 8 } = {}) {
 }
 
 async function metSearch(q) {
-  // Use artistOrCulture=true to reduce query noise (per Met docs)
   const url = `https://collectionapi.metmuseum.org/public/collection/v1/search?hasImages=true&artistOrCulture=true&q=${encodeURIComponent(q)}`
   return fetchJson(url)
 }
@@ -53,7 +65,6 @@ function isTargetArtist(obj, targetName) {
   const a = normalize(obj?.artistDisplayName)
   const t = normalize(targetName)
   if (!a) return false
-  // strict-ish match: allow punctuation differences, but require full last name.
   const last = t.split(' ').slice(-1)[0]
   return a === t || a.includes(last)
 }
@@ -71,18 +82,28 @@ function isGood(obj, targetName) {
 const perArtist = 30
 const maxIdsToScan = 5000
 
+const state = loadState()
 const artworks = []
 
 for (const a of ARTISTS_V1) {
+  const artistKey = a.name
+  const prev = state.byArtist[artistKey] || { cursor: 0, kept: 0 }
+
   const s = await metSearch(a.q)
   const ids = (s.objectIDs || []).slice(0, maxIdsToScan)
-  let kept = 0
 
-  for (const id of ids) {
+  let kept = prev.kept
+  let cursor = prev.cursor
+
+  for (; cursor < ids.length; cursor++) {
     if (kept >= perArtist) break
 
+    const id = ids[cursor]
     const obj = await metObject(id)
-    if (!isGood(obj, a.name)) continue
+    if (!isGood(obj, a.name)) {
+      await sleep(900)
+      continue
+    }
 
     artworks.push({
       objectID: obj.objectID,
@@ -99,14 +120,19 @@ for (const a of ARTISTS_V1) {
 
     kept++
 
-    // slow down significantly (Met seems to block aggressively on bursts)
+    state.byArtist[artistKey] = { cursor: cursor + 1, kept }
+    saveState(state)
+
     await sleep(900)
   }
 
   console.log(`${a.name}: kept ${kept}`)
-  // bigger pause between artists
+  state.byArtist[artistKey] = { cursor, kept }
+  saveState(state)
+
   await sleep(10_000)
 }
 
 fs.writeFileSync(OUT, JSON.stringify({ generatedAt: new Date().toISOString(), artworks }, null, 2))
 console.log(`Wrote ${artworks.length} artworks -> ${OUT}`)
+console.log(`Resume state saved -> ${STATE_PATH}`)
