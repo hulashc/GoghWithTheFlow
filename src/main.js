@@ -27,9 +27,10 @@ rightSel.value = DEFAULT_ARTISTS[1]
 
 const leftMount = document.getElementById('leftMount')
 const rightMount = document.getElementById('rightMount')
-
 const leftTitle = document.getElementById('leftTitle')
 const rightTitle = document.getElementById('rightTitle')
+const leftMeta = document.getElementById('leftMeta')
+const rightMeta = document.getElementById('rightMeta')
 
 const leftViewer = initViewer(leftMount)
 const rightViewer = initViewer(rightMount)
@@ -39,11 +40,37 @@ async function loadData() {
     fetch('./data/artworks.json').then(r => r.json()).catch(() => ({ artworks: [] })),
     fetch('./data/features.json').then(r => r.json()).catch(() => ({ featuresById: {} }))
   ])
+  // Debug: log unique artist names from the JSON so we can verify matching
+  const names = [...new Set((artworks.artworks ?? []).map(a => a.artistDisplayName))]
+  console.log('[GoghWithTheFlow] Artist names in artworks.json:', names)
   return { artworks: artworks.artworks ?? [], featuresById: features.featuresById ?? {} }
 }
 
+function normalize(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // strip accents
+    .replace(/[^a-z0-9 ]/g, ' ')     // strip punctuation
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function pickFirstForArtist(artworks, artist) {
-  return artworks.find(a => a.artistDisplayName === artist) || null
+  const target = normalize(artist)
+  // 1. Exact normalised match
+  let found = artworks.find(a => normalize(a.artistDisplayName) === target)
+  if (found) return found
+  // 2. All words in the dropdown name appear in the stored name (handles "Renoir, Pierre-Auguste (French, 1841–1919)")
+  const targetWords = target.split(' ').filter(Boolean)
+  found = artworks.find(a => {
+    const stored = normalize(a.artistDisplayName)
+    return targetWords.every(w => stored.includes(w))
+  })
+  if (found) return found
+  // 3. Last name only fallback
+  const lastName = normalize(artist).split(' ').slice(-1)[0]
+  return artworks.find(a => normalize(a.artistDisplayName).includes(lastName)) || null
 }
 
 let cache = null
@@ -60,8 +87,10 @@ async function rerender() {
   const leftWork = pickFirstForArtist(cache.artworks, leftArtist)
   const rightWork = pickFirstForArtist(cache.artworks, rightArtist)
 
-  const mode = modeSel.value
+  if (leftMeta) leftMeta.textContent = leftWork ? `${leftWork.title} — ${leftWork.objectDate || ''}` : ''
+  if (rightMeta) rightMeta.textContent = rightWork ? `${rightWork.title} — ${rightWork.objectDate || ''}` : ''
 
+  const mode = modeSel.value
   await leftViewer.setArtwork(leftWork, cache.featuresById[leftWork?.objectID], { mode })
   await rightViewer.setArtwork(rightWork, cache.featuresById[rightWork?.objectID], { mode })
 }
