@@ -1,0 +1,7 @@
+public/data/artworks.json
+public/data/images/
+public/data/overlays/
+public/data/features.json
+node_modules
+.DS_Store
+dist

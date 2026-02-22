@@ -1,0 +1,20 @@
+{
+  "name": "goghwiththeflow",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "collect:met": "node scripts/collect-met.mjs",
+    "download:images": "node scripts/download-images.mjs",
+    "compute:features": "node scripts/compute-features.mjs"
+  },
+  "dependencies": {
+    "three": "^0.161.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}
