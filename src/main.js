@@ -2,7 +2,6 @@ import { initViewer } from './viewer.js'
 
 const DEFAULT_ARTISTS = [
   'Vincent van Gogh',
-  'Claude Monet',
   'Pierre-Auguste Renoir',
   'Paul Cézanne'
 ]
@@ -36,7 +35,6 @@ const leftViewer = initViewer(leftMount)
 const rightViewer = initViewer(rightMount)
 
 async function loadData() {
-  // These are produced by the pipeline scripts into public/data/
   const [artworks, features] = await Promise.all([
     fetch('./data/artworks.json').then(r => r.json()).catch(() => ({ artworks: [] })),
     fetch('./data/features.json').then(r => r.json()).catch(() => ({ featuresById: {} }))
