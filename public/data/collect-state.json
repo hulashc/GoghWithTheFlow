@@ -1,0 +1,16 @@
+{
+  "byArtist": {
+    "Vincent van Gogh": {
+      "cursor": 42,
+      "kept": 29
+    },
+    "Pierre-Auguste Renoir": {
+      "cursor": 33,
+      "kept": 30
+    },
+    "Paul Cézanne": {
+      "cursor": 30,
+      "kept": 30
+    }
+  }
+}
