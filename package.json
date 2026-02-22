@@ -1,7 +1,7 @@
 {
   "name": "goghwiththeflow",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,9 +9,12 @@
     "preview": "vite preview",
     "collect:met": "node scripts/collect-met.mjs",
     "download:images": "node scripts/download-images.mjs",
-    "compute:features": "node scripts/compute-features.mjs"
+    "compute:features": "node scripts/compute-features.mjs",
+    "pipeline:v1": "npm run collect:met && npm run download:images && npm run compute:features"
   },
   "dependencies": {
+    "image-js": "^0.35.6",
+    "node-vibrant": "^3.2.1",
     "three": "^0.161.0"
   },
   "devDependencies": {
